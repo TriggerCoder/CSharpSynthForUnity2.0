@@ -1,0 +1,22 @@
+﻿<Properties StartupItem="Assembly-CSharp.csproj">
+  <MonoDevelop.Ide.Workspace ActiveConfiguration="Debug" PreferredExecutionTarget="Unity.Instance.Unity Editor" />
+  <MonoDevelop.Ide.Workbench ActiveDocument="Assets\ThirdParty\CSharpSynth\Source\AudioSynthesis\Synthesis\Synthesizer.Main.cs">
+    <Files>
+      <File FileName="Assets\Scripts\Midi\MidiPlayer.cs" Line="88" Column="10" />
+      <File FileName="Assets\ThirdParty\CSharpSynth\Source\StreamingAssetResouce.cs" Line="1" Column="1" />
+      <File FileName="Assets\ThirdParty\CSharpSynth\Source\AudioSynthesis\Bank\PatchBank.cs" Line="1" Column="1" />
+      <File FileName="Assets\ThirdParty\CSharpSynth\Source\AudioSynthesis\Synthesis\Synthesizer.Main.cs" Line="253" Column="10" />
+      <File FileName="Assets\ThirdParty\CSharpSynth\Source\AudioSynthesis\Bank\Patches\MultiPatch.cs" Line="1" Column="1" />
+      <File FileName="Assets\ThirdParty\CSharpSynth\Source\AudioSynthesis\Synthesis\SynthHelper.cs" Line="1" Column="1" />
+      <File FileName="Assets\ThirdParty\CSharpSynth\Source\AudioSynthesis\Util\IOHelper.cs" Line="1" Column="1" />
+      <File FileName="Assets\ThirdParty\CSharpSynth\Source\AudioSynthesis\Wave\PcmData.cs" Line="1" Column="1" />
+      <File FileName="Assets\ThirdParty\CSharpSynth\Source\AudioSynthesis\Wave\WaveHelper.cs" Line="1" Column="1" />
+      <File FileName="Assets\ThirdParty\CSharpSynth\Source\AudioSynthesis\Bank\SampleDataAsset.cs" Line="1" Column="1" />
+      <File FileName="Assets\ThirdParty\CSharpSynth\Source\AudioSynthesis\Midi\MidiFile.cs" Line="1" Column="1" />
+    </Files>
+  </MonoDevelop.Ide.Workbench>
+  <MonoDevelop.Ide.DebuggingService.Breakpoints>
+    <BreakpointStore />
+  </MonoDevelop.Ide.DebuggingService.Breakpoints>
+  <MonoDevelop.Ide.DebuggingService.PinnedWatches />
+</Properties>
