@@ -1,7 +1,9 @@
-﻿namespace AudioSynthesis.Midi.Event
-{
-    using System;
+﻿using System;
+using System.Linq;
+using UnityEngine;
 
+namespace AudioSynthesis.Midi.Event
+{
     public class MidiEvent
     {
         protected int time;

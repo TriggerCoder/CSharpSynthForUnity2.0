@@ -1,13 +1,14 @@
-﻿namespace AudioSynthesis.Midi
-{
-    using System;
-    using System.IO;
-    using System.Text;
-    using System.Collections.Generic;
-    using AudioSynthesis.Midi.Event;
-    using AudioSynthesis.Util;
+﻿using System;
+using System.Collections.Generic;
+using System.Diagnostics;
+using System.IO;
+using System.Text;
+using AudioSynthesis.Midi.Event;
+using AudioSynthesis.Util;
 
-    public class MidiFile
+namespace AudioSynthesis.Midi
+{
+	public class MidiFile
     {
         public enum TrackFormat { SingleTrack, MultiTrack, MultiSong }
         public enum TimeFormat { TicksPerBeat, FamesPerSecond }
@@ -31,6 +32,17 @@
         public MidiTrack[] Tracks
         {
             get { return mTracks; }
+            set { mTracks = value; }
+        }
+
+        public MidiFile()
+        {
+	        mTrackFormat = TrackFormat.SingleTrack;
+	        mTimeFormat = TimeFormat.TicksPerBeat;
+	        mDivision = 500;
+
+	        MidiTrack midiTrack = new MidiTrack();
+	        mTracks = new MidiTrack[] { midiTrack };
         }
 
         public MidiFile(IResource midiFile)
@@ -143,7 +155,7 @@
             }
             catch(EndOfStreamException ex)
             {
-                System.Diagnostics.Debug.WriteLine(ex.Message + "\nWarning: the midi file may not have one or more invalid tracks.");
+                Debug.WriteLine(ex.Message + "\nWarning: the midi file may not have one or more invalid tracks.");
                 byte[] emptyByte = new byte[0];
                 MidiEvent[] emptyEvents = new MidiEvent[0];
                 for (int x = 0; x < mTracks.Length; x++)
@@ -169,7 +181,7 @@
 			}
 			catch(EndOfStreamException ex)
 			{
-				System.Diagnostics.Debug.WriteLine(ex.Message + "\nWarning: the midi file may not have one or more invalid tracks.");
+				Debug.WriteLine(ex.Message + "\nWarning: the midi file may not have one or more invalid tracks.");
 				byte[] emptyByte = new byte[0];
 				MidiEvent[] emptyEvents = new MidiEvent[0];
 				for (int x = 0; x < mTracks.Length; x++)
@@ -436,7 +448,9 @@
                 case 0x7F://seq specific
                     return new MetaDataEvent(delta, status, metaStatus, reader.ReadBytes(ReadVariableLength(reader)));
             }
-            throw new Exception("Not a valid meta message Status: " + status + " Meta: " + metaStatus);
+
+            return new MetaEvent(delta, metaStatus, 0, 0);
+            // throw new Exception("Not a valid meta message Status: " + status + " Meta: " + metaStatus);
         }
 
 		private static MidiEvent ReadMetaMessage(byte[] reader, int delta, byte status, ref int p)
