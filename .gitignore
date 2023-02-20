@@ -8,6 +8,9 @@
 
 Assets/AssetStoreTools*
 
+Assets/Resources/soundfonts/**/*.meta
+Assets/Resources/soundfonts/MuseScore_General.sf2.bytes
+
 Assets/ThirdParty/**/*.meta
 Assets/StreamingAssets/
 
