@@ -5,9 +5,18 @@ using AudioSynthesis;
 namespace UnityMidi
 {
     [System.Serializable]
-    public class StreamingAssetResouce : IResource
+    public class StreamingAssetResource : IResource
     {
         [SerializeField] public string streamingAssetPath;
+
+        public StreamingAssetResource()
+        {
+        }
+        
+        public StreamingAssetResource(string path)
+        {
+            this.streamingAssetPath = path;
+        }
 
         public bool ReadAllowed()
         {
