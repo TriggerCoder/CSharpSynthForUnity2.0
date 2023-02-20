@@ -229,7 +229,7 @@ GameObject:
   - component: {fileID: 372554568}
   - component: {fileID: 372554570}
   m_Layer: 0
-  m_Name: MidiSong
+  m_Name: MidiPlayer
   m_TagString: Untagged
   m_Icon: {fileID: 0}
   m_NavMeshLayer: 0
@@ -358,15 +358,13 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7a4cbb7412d2fba459dcb0e03aa8b8b1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  playCreatedMidi: 0
-  restart: 1
-  banksourcefile: soundfonts/MuseScore_General.sf2
+  playCreatedMidi: 1
+  restart: 0
+  banksourcefile: soundfonts/Scc1t2.sf2
   midiFilePath: Test.mid
   loadOnAwake: 1
   loop: 0
   playOnStart: 1
-  channel: 1
-  sampleRate: 44100
   bufferSize: 1024
   midiNote: 62
   midiVelocity: 127

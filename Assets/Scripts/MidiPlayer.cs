@@ -6,6 +6,7 @@ using AudioSynthesis.Midi;
 using AudioSynthesis.Midi.Event;
 using AudioSynthesis.Sequencer;
 using AudioSynthesis.Synthesis;
+using CircularBuffer;
 using UnityEngine;
 
 namespace UnityMidi
@@ -21,17 +22,13 @@ namespace UnityMidi
 		[SerializeField] bool loadOnAwake = true;
 		[SerializeField] bool loop = true;
 		[SerializeField] bool playOnStart = true;
-        [SerializeField] int channel = 2;
-        [SerializeField] int sampleRate = 44100;
         [SerializeField] int bufferSize = 1024;
         PatchBank bank;
         MidiFile midi;
         Synthesizer synthesizer;
         AudioSource audioSource;
         MidiFileSequencer sequencer;
-        int bufferHead = 0;
-        float[] currentBuffer;
-
+        
         public AudioSource AudioSource { get { return audioSource; } }
 
         public MidiFileSequencer Sequencer { get { return sequencer; } }
@@ -44,15 +41,23 @@ namespace UnityMidi
         public int midiVelocity = 80;
         
         private bool isPlayingNote;
-        private bool hasFilledBuffer;
 
         private bool isInitialized;
         
+        private int audioFilterReadSampleRateHz; 
+        private CircularBuffer<float> availableSingleChannelOutputSamples;
+        
         public void Awake()
         {
-            synthesizer = new Synthesizer(sampleRate, channel, bufferSize, 1);
-            sequencer = new MidiFileSequencer(synthesizer);
             audioSource = GetComponent<AudioSource>();
+            
+            audioFilterReadSampleRateHz = AudioSettings.outputSampleRate;
+            // Synthesize samples in mono.
+            int synthesizerChannelCount = 1;
+            synthesizer = new Synthesizer(audioFilterReadSampleRateHz, synthesizerChannelCount, bufferSize, 1);
+            sequencer = new MidiFileSequencer(synthesizer);
+
+            availableSingleChannelOutputSamples = new CircularBuffer<float>(bufferSize * 2);
 
 			if (loadOnAwake)
 			{
@@ -75,17 +80,18 @@ namespace UnityMidi
 	        MidiFile midiFile = new();
 
 	        List<MidiEvent> midiEvents = new();
-	        AddNoteOnOffEvents(midiEvents, 5000, 5000);
+	        AddNoteOnOffEvents(midiEvents, 60, 0, 1000);
+	        AddNoteOnOffEvents(midiEvents, 62, 2000, 5000);
+	        AddNoteOnOffEvents(midiEvents, 60, 1000, 1000);
 	        midiFile.Tracks[0].MidiEvents = midiEvents.ToArray();
-	        
+			
 	        return midiFile;
         }
         
-        void AddNoteOnOffEvents(List<MidiEvent> midiEvents, int noteOnDeltaTime, int noteLengthInMillis)
+        void AddNoteOnOffEvents(List<MidiEvent> midiEvents, byte pitch, int noteOnDeltaTimeInMillis, int noteLengthInMillis)
         {
-	        byte pitch = (byte)midiNote;
 	        byte velocity = (byte)midiVelocity;
-	        MidiEvent noteOnEvent = MidiEventUtils.CreateNoteOnEvent(noteOnDeltaTime, 0, pitch, velocity);
+	        MidiEvent noteOnEvent = MidiEventUtils.CreateNoteOnEvent(noteOnDeltaTimeInMillis, 0, pitch, velocity);
 	        midiEvents.Add(noteOnEvent);
 	        
 	        MidiEvent noteOffEvent = MidiEventUtils.CreateNoteOffEvent(noteLengthInMillis, 0, pitch, velocity);
@@ -118,7 +124,6 @@ namespace UnityMidi
 			if (restart)
 			{
 				restart = false;
-				hasFilledBuffer = false;
 				LoadMidi(midi);
 				Play();
 			}
@@ -208,7 +213,9 @@ namespace UnityMidi
 
         public void Play()
         {
-			audioSource.clip = AudioClip.Create("Midi", bufferSize, channel, sampleRate, true, OnAudioRead);
+			Debug.Log("Playing midi");
+			
+			// audioSource.clip = AudioClip.Create("Midi", bufferSize, channel, sampleRate, true, OnAudioRead);
             audioSource.Play();
 			sequencer.Play();
         }
@@ -221,70 +228,41 @@ namespace UnityMidi
 			sequencer.UnloadMidi();
 		}
 
-		void FillBuffer()
-		{					
-			sequencer.FillMidiEventQueue(loop);
-			synthesizer.GetNext();
-			currentBuffer = synthesizer.WorkingBuffer;
-			bufferHead = 0;
-		}
-
-		void OnAudioRead(float[] data)
-        {
-            int count = 0;
-
-			while (count < data.Length)
-			{
-				if (currentBuffer == null)
-					FillBuffer();
-				else if (bufferHead >= currentBuffer.Length)
-					FillBuffer();
-				var length = Mathf.Min(currentBuffer.Length - bufferHead, data.Length - count);
-				Array.Copy(currentBuffer, bufferHead, data, count, length);
-				bufferHead += length;
-				count += length;
-
-				if (hasFilledBuffer)
-				{
-					hasFilledBuffer = data.Count(it => it != 0) > 0;
-					if (!hasFilledBuffer)
-					{
-						Debug.Log("Buffer empty");
-					}
-				}
-				else
-				{
-					hasFilledBuffer = data.Count(it => it != 0) > 0;
-					if (hasFilledBuffer)
-					{
-						Debug.Log("Buffer filled");
-					}
-				}
-			}
-        }
-		
-		private void OnAudioFilterRead(float[] data, int outputChannelCount)
+		void OnAudioFilterRead(float[] data, int outputChannelCount)
 	    {
-		    return;
-		    
-	        Debug.Log($"OnAudioFilterRead: {isInitialized}");//
 	        if (!isInitialized)
 	        {
 	            return;
 	        }
 
-	        int count = 0;
-
-	        while (count < data.Length)
+	        // Synthesize new samples from the Midi instrument until there is enough to fill the data array.
+	        int neededSingleChannelSamples = data.Length / outputChannelCount;
+	        if (neededSingleChannelSamples >= availableSingleChannelOutputSamples.Capacity)
 	        {
-		        if (currentBuffer == null)
-			        FillBuffer();
-		        else if (bufferHead >= currentBuffer.Length)
-			        FillBuffer();
-		        var length = Mathf.Min(currentBuffer.Length - bufferHead, data.Length - count);
-		        Array.Copy(currentBuffer, bufferHead, data, count, length);
-		        bufferHead += length;
-		        count += length;
+		        Debug.LogWarning("available sample capacity is too small.");
+		        neededSingleChannelSamples = availableSingleChannelOutputSamples.Capacity - 1;
+	        }
+	        while (availableSingleChannelOutputSamples.Count < neededSingleChannelSamples)
+	        {
+		        sequencer.FillMidiEventQueue(loop);
+		        synthesizer.GetNext();
+		        for (int i = 0; i < synthesizer.sampleBuffer.Length; i++)
+		        {
+			        availableSingleChannelOutputSamples.PushBack(synthesizer.sampleBuffer[i]);
+		        }
+	        }
+
+	        // The Midi stream is generated in mono (1 channel).
+	        // These samples are written to every channel of the output data array.
+	        for (int outputSampleIndex = 0; outputSampleIndex < data.Length && !availableSingleChannelOutputSamples.IsEmpty; outputSampleIndex += outputChannelCount)
+	        {
+	            float sampleValue = availableSingleChannelOutputSamples.Front();
+	            availableSingleChannelOutputSamples.PopFront();
+
+	            for (int outputChannelIndex = 0; outputChannelIndex < outputChannelCount; outputChannelIndex++)
+	            {
+	                data[outputSampleIndex + outputChannelIndex] = sampleValue;
+	            }
 	        }
 	    }
     }
