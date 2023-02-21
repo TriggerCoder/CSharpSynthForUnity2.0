@@ -1,5 +1,4 @@
-﻿using System;
-using System.Collections.Generic;
+﻿using System.Collections.Generic;
 using System.Linq;
 using AudioSynthesis.Bank;
 using AudioSynthesis.Midi;
@@ -14,36 +13,25 @@ namespace UnityMidi
     [RequireComponent(typeof(AudioSource))]
     public class MidiPlayer : MonoBehaviour
     {
-	    public bool playCreatedMidi;
+		private const int BufferSize = 1024;
+
 	    public bool restart;
-
-	    public string banksourcefile = "soundfonts/Scc1t2.sf2";
+		public bool playOnAwake = true;
+		public bool loop = true;
+	    public bool playCreatedMidi;
 		public string midiFilePath;
-		[SerializeField] bool loadOnAwake = true;
-		[SerializeField] bool loop = true;
-		[SerializeField] bool playOnStart = true;
-        [SerializeField] int bufferSize = 1024;
-        PatchBank bank;
-        MidiFile midi;
-        Synthesizer synthesizer;
-        AudioSource audioSource;
-        MidiFileSequencer sequencer;
-        
-        public AudioSource AudioSource { get { return audioSource; } }
-
-        public MidiFileSequencer Sequencer { get { return sequencer; } }
-
-        public PatchBank Bank { get { return bank; } }
-
-        public MidiFile MidiFile { get { return midi; } }
-
+	    public string bankFile = "soundfonts/Scc1t2.sf2";
         public int midiNote = 60;
         public int midiVelocity = 80;
         
-        private bool isPlayingNote;
+        private AudioSource audioSource;
+		private PatchBank bank;
+        private MidiFile loadedMidiFile;
+        private Synthesizer synthesizer;
+        private MidiFileSequencer sequencer;
 
-        private bool isInitialized;
-        
+        private bool isPlayingNote;
+    
         private int audioFilterReadSampleRateHz; 
         private CircularBuffer<float> availableSingleChannelOutputSamples;
         
@@ -54,25 +42,27 @@ namespace UnityMidi
             audioFilterReadSampleRateHz = AudioSettings.outputSampleRate;
             // Synthesize samples in mono.
             int synthesizerChannelCount = 1;
-            synthesizer = new Synthesizer(audioFilterReadSampleRateHz, synthesizerChannelCount, bufferSize, 1);
+            synthesizer = new Synthesizer(audioFilterReadSampleRateHz, synthesizerChannelCount, BufferSize, 1);
             sequencer = new MidiFileSequencer(synthesizer);
 
-            availableSingleChannelOutputSamples = new CircularBuffer<float>(bufferSize * 2);
+            availableSingleChannelOutputSamples = new CircularBuffer<float>(BufferSize * 2);
 
-			if (loadOnAwake)
+			LoadBank();
+			if (playCreatedMidi)
 			{
-				LoadBank();
-				if (playCreatedMidi)
-				{
-					LoadMidi(CreateMidiFile());
-				}
-				else
-				{
-					LoadMidi(new MidiFile(new StreamingAssetResource(midiFilePath)));
-				}
+				LoadMidiFile(CreateMidiFile());
+			}
+			else
+			{
+				string midiFilePathWithFileExtension = AddFileExtensionIfNone(midiFilePath, ".mid");
+				LoadMidiFile(new MidiFile(new StreamingAssetResource(midiFilePathWithFileExtension)));
 			}
 
 			restart = false;
+			if (playOnAwake)
+			{
+				Play();
+			}
         }
 
         private MidiFile CreateMidiFile()
@@ -97,14 +87,6 @@ namespace UnityMidi
 	        MidiEvent noteOffEvent = MidiEventUtils.CreateNoteOffEvent(noteLengthInMillis, 0, pitch, velocity);
 	        midiEvents.Add(noteOffEvent);
         }
-        
-        public void Start()
-		{
-			if (playOnStart)
-			{
-				Play();
-			}
-		}
 
 		public void Update()
 		{
@@ -124,41 +106,44 @@ namespace UnityMidi
 			if (restart)
 			{
 				restart = false;
-				LoadMidi(midi);
+				LoadMidiFile(loadedMidiFile);
 				Play();
 			}
 		}
 
 		public void LoadBank()
 		{
-			bank = new PatchBank(banksourcefile);
+			bank = new PatchBank(bankFile);
 			synthesizer.UnloadBank();
 			synthesizer.LoadBank(bank);
 		}
 
-		public void StreamMidi(byte[] Midisong)
+		public void StreamMidiFile(byte[] midiFileBytes)
 		{
-			LoadMidi(new MidiFile(Midisong));
+			LoadMidiFile(new MidiFile(midiFileBytes));
 			Play();
 		}
 
-        public void LoadMidi(MidiFile midi)
+        public void LoadMidiFile(MidiFile midiFile)
         {
 	        Debug.Log("Loading midi");
             
-	        this.midi = midi;
-
-            int trackIndex = 0;
-            int channelIndex = 3;
-            // SoloTrackAndChannel(this.midi, trackIndex, channelIndex);
-            // SetFirstDeltaTimeToZero(midi, trackIndex);
+	        // ManipulateMidiFile(midiFile);
             
             synthesizer.NoteOffAll(true);
             sequencer.Stop();
             sequencer.UnloadMidi();
-            sequencer.LoadMidi(midi);
+            sequencer.LoadMidi(midiFile);
 
-            isInitialized = true;
+	        loadedMidiFile = midiFile;
+        }
+
+        private void ManipulateMidiFile(MidiFile midiFile)
+        {
+	        int trackIndex = 0;
+	        int channelIndex = 3;
+	        SoloTrackAndChannel(midiFile, trackIndex, channelIndex);
+	        SetFirstDeltaTimeToZero(midiFile, trackIndex);
         }
 
         private void SetFirstDeltaTimeToZero(MidiFile midiFile, int trackIndex)
@@ -179,7 +164,7 @@ namespace UnityMidi
 
         private void SoloTrackAndChannel(MidiFile midiFile, int trackIndex, int channelIndex)
         {
-	        MidiTrack midiTrack = midi.Tracks[trackIndex];
+	        MidiTrack midiTrack = this.loadedMidiFile.Tracks[trackIndex];
 	        int deltaTimeOfRemovedMidiEvents = 0;
 	        List<MidiEvent> midiEventsToBeRemoved = new();
 	        midiTrack.MidiEvents.ToList().ForEach(midiEvent =>
@@ -208,7 +193,7 @@ namespace UnityMidi
 		        .Except(midiEventsToBeRemoved)
 		        .ToArray();
 
-	        midi.Tracks = new MidiTrack[] { midiTrack };
+	        this.loadedMidiFile.Tracks = new MidiTrack[] { midiTrack };
         }
 
         public void Play()
@@ -230,7 +215,7 @@ namespace UnityMidi
 
 		void OnAudioFilterRead(float[] data, int outputChannelCount)
 	    {
-	        if (!isInitialized)
+	        if (loadedMidiFile == null)
 	        {
 	            return;
 	        }
@@ -265,5 +250,15 @@ namespace UnityMidi
 	            }
 	        }
 	    }
+		
+		private static string AddFileExtensionIfNone(string path, string fileExtension)
+		{
+			if (!path.ToLowerInvariant().EndsWith(fileExtension.ToLowerInvariant()))
+			{
+				return path + fileExtension;
+			}
+
+			return path;
+		}
     }
 }
