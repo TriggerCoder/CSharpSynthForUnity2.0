@@ -1,14 +1,5 @@
-// See https://github.com/joaoportela/CircullarBuffer-CSharp
-/*
-License:
-----------------------------------------------------------------------------
-"THE BEER-WARE LICENSE" (Revision 42):
-Joao Portela wrote this file. As long as you retain this notice you
-can do whatever you want with this stuff. If we meet some day, and you think
-this stuff is worth it, you can buy me a beer in return.
-Joao Portela
-----------------------------------------------------------------------------
-*/
+// See https://github.com/joaoportela/CircularBuffer-CSharp
+// License: Public Domain (https://github.com/joaoportela/CircularBuffer-CSharp/blob/master/LICENSE)
 
 using System;
 using System.Collections;
@@ -45,8 +36,15 @@ namespace CircularBuffer
         /// <summary>
         /// The _size. Buffer size.
         /// </summary>
-        private int count;
+        private int _size;
 
+        /// <summary>
+        /// Initializes a new instance of the <see cref="CircularBuffer{T}"/> class.
+        /// 
+        /// </summary>
+        /// <param name='capacity'>
+        /// Buffer capacity. Must be positive.
+        /// </param>
         public CircularBuffer(int capacity)
             : this(capacity, new T[] { })
         {
@@ -84,10 +82,10 @@ namespace CircularBuffer
             _buffer = new T[capacity];
 
             Array.Copy(items, _buffer, items.Length);
-            count = items.Length;
+            _size = items.Length;
 
             _start = 0;
-            _end = count == capacity ? 0 : count;
+            _end = _size == capacity ? 0 : _size;
         }
 
         /// <summary>
@@ -96,33 +94,35 @@ namespace CircularBuffer
         /// </summary>
         public int Capacity { get { return _buffer.Length; } }
 
+        /// <summary>
+        /// Boolean indicating if Circular is at full capacity.
+        /// Adding more elements when the buffer is full will
+        /// cause elements to be removed from the other end
+        /// of the buffer.
+        /// </summary>
         public bool IsFull
         {
             get
             {
-                return Count == Capacity;
+                return Size == Capacity;
             }
         }
 
+        /// <summary>
+        /// True if has no elements.
+        /// </summary>
         public bool IsEmpty
         {
             get
             {
-                return Count == 0;
+                return Size == 0;
             }
-        }
-
-        public void Clear()
-        {
-            count = 0;
-            _start = 0;
-            _end = count == Capacity ? 0 : count;
         }
 
         /// <summary>
         /// Current buffer size (the number of elements that the buffer has).
         /// </summary>
-        public int Count { get { return count; } }
+        public int Size { get { return _size; } }
 
         /// <summary>
         /// Element at the front of the buffer - this[0].
@@ -144,6 +144,13 @@ namespace CircularBuffer
             return _buffer[(_end != 0 ? _end : Capacity) - 1];
         }
 
+        /// <summary>
+        /// Index access to elements in buffer.
+        /// Index does not loop around like when adding elements,
+        /// valid interval is [0;Size[
+        /// </summary>
+        /// <param name="index">Index of element to access.</param>
+        /// <exception cref="IndexOutOfRangeException">Thrown when index is outside of [; Size[ interval.</exception>
         public T this[int index]
         {
             get
@@ -152,9 +159,9 @@ namespace CircularBuffer
                 {
                     throw new IndexOutOfRangeException(string.Format("Cannot access index {0}. Buffer is empty", index));
                 }
-                if (index >= count)
+                if (index >= _size)
                 {
-                    throw new IndexOutOfRangeException(string.Format("Cannot access index {0}. Buffer size is {1}", index, count));
+                    throw new IndexOutOfRangeException(string.Format("Cannot access index {0}. Buffer size is {1}", index, _size));
                 }
                 int actualIndex = InternalIndex(index);
                 return _buffer[actualIndex];
@@ -165,9 +172,9 @@ namespace CircularBuffer
                 {
                     throw new IndexOutOfRangeException(string.Format("Cannot access index {0}. Buffer is empty", index));
                 }
-                if (index >= count)
+                if (index >= _size)
                 {
-                    throw new IndexOutOfRangeException(string.Format("Cannot access index {0}. Buffer size is {1}", index, count));
+                    throw new IndexOutOfRangeException(string.Format("Cannot access index {0}. Buffer size is {1}", index, _size));
                 }
                 int actualIndex = InternalIndex(index);
                 _buffer[actualIndex] = value;
@@ -194,7 +201,7 @@ namespace CircularBuffer
             {
                 _buffer[_end] = item;
                 Increment(ref _end);
-                ++count;
+                ++_size;
             }
         }
 
@@ -218,7 +225,7 @@ namespace CircularBuffer
             {
                 Decrement(ref _start);
                 _buffer[_start] = item;
-                ++count;
+                ++_size;
             }
         }
 
@@ -231,7 +238,7 @@ namespace CircularBuffer
             ThrowIfEmpty("Cannot take elements from an empty buffer.");
             Decrement(ref _end);
             _buffer[_end] = default(T);
-            --count;
+            --_size;
         }
 
         /// <summary>
@@ -243,7 +250,20 @@ namespace CircularBuffer
             ThrowIfEmpty("Cannot take elements from an empty buffer.");
             _buffer[_start] = default(T);
             Increment(ref _start);
-            --count;
+            --_size;
+        }
+
+        /// <summary>
+        /// Clears the contents of the array. Size = 0, Capacity is unchanged.
+        /// </summary>
+        /// <exception cref="NotImplementedException"></exception>
+        public void Clear()
+        {
+            // to clear we just reset everything.
+            _start = 0;
+            _end = 0;
+            _size = 0;
+            Array.Clear(_buffer, 0, _buffer.Length);
         }
 
         /// <summary>
@@ -254,9 +274,9 @@ namespace CircularBuffer
         /// <returns>A new array with a copy of the buffer contents.</returns>
         public T[] ToArray()
         {
-            T[] newArray = new T[Count];
+            T[] newArray = new T[Size];
             int newArrayOffset = 0;
-            var segments = new ArraySegment<T>[2] { ArrayOne(), ArrayTwo() };
+            var segments = ToArraySegments();
             foreach (ArraySegment<T> segment in segments)
             {
                 Array.Copy(segment.Array, segment.Offset, newArray, newArrayOffset, segment.Count);
@@ -265,10 +285,31 @@ namespace CircularBuffer
             return newArray;
         }
 
+        /// <summary>
+        /// Get the contents of the buffer as 2 ArraySegments.
+        /// Respects the logical contents of the buffer, where
+        /// each segment and items in each segment are ordered
+        /// according to insertion.
+        ///
+        /// Fast: does not copy the array elements.
+        /// Useful for methods like <c>Send(IList&lt;ArraySegment&lt;Byte&gt;&gt;)</c>.
+        /// 
+        /// <remarks>Segments may be empty.</remarks>
+        /// </summary>
+        /// <returns>An IList with 2 segments corresponding to the buffer content.</returns>
+        public IList<ArraySegment<T>> ToArraySegments()
+        {
+            return new [] { ArrayOne(), ArrayTwo() };
+        }
+
         #region IEnumerable<T> implementation
+        /// <summary>
+        /// Returns an enumerator that iterates through this buffer.
+        /// </summary>
+        /// <returns>An enumerator that can be used to iterate this collection.</returns>
         public IEnumerator<T> GetEnumerator()
         {
-            var segments = new ArraySegment<T>[2] { ArrayOne(), ArrayTwo() };
+            var segments = ToArraySegments();
             foreach (ArraySegment<T> segment in segments)
             {
                 for (int i = 0; i < segment.Count; i++)

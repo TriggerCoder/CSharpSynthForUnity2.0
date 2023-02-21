@@ -291,7 +291,7 @@ namespace UnityMidi
 				Debug.LogWarning($"available sample capacity is too small. Samples needed: {neededSingleChannelSamples}, capacity: {availableSingleChannelOutputSamples.Capacity}");
 				neededSingleChannelSamples = availableSingleChannelOutputSamples.Capacity - 1;
 			}
-			while (availableSingleChannelOutputSamples.Count < neededSingleChannelSamples)
+			while (availableSingleChannelOutputSamples.Size < neededSingleChannelSamples)
 			{
 				sequencer.FillMidiEventQueue(loop);
 				synthesizer.GetNext();
