@@ -1,5 +1,11 @@
 using UnityEngine;
 
+/**
+ * This script demonstrates that an Unity's AudioClip created using a PCMReaderCallback always has a big audible latency.
+ * In contrast, OnAudioFilterRead has not such a high latency.
+ *
+ * See also https://forum.unity.com/threads/audioclip-pcmreadercallback-has-insane-latency.1022065/#post-6620188
+ */
 [RequireComponent(typeof(AudioSource))]
 public class PcmReaderCallbackTest : MonoBehaviour
 {
@@ -28,6 +34,7 @@ public class PcmReaderCallbackTest : MonoBehaviour
 
     private void Update()
     {
+        // Press left mouse button to play sound
         shouldPlay = Input.GetMouseButton(0);
         if (shouldPlay != oldShouldPlay)
         {
