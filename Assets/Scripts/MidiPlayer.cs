@@ -1,4 +1,6 @@
-﻿using System.Collections.Generic;
+﻿using System;
+using System.Collections;
+using System.Collections.Generic;
 using System.Linq;
 using AudioSynthesis.Bank;
 using AudioSynthesis.Midi;
@@ -7,6 +9,7 @@ using AudioSynthesis.Sequencer;
 using AudioSynthesis.Synthesis;
 using CircularBuffer;
 using UnityEngine;
+using UnityEngine.Serialization;
 
 namespace UnityMidi
 {
@@ -16,7 +19,7 @@ namespace UnityMidi
 		private const int BufferSize = 1024;
 
 		public bool playOnAwake = true;
-		public bool loop = true;
+		public bool loop;
 	    public bool playCreatedMidi;
 		public bool useAudioClip;
 		public string midiFilePath;
@@ -25,7 +28,8 @@ namespace UnityMidi
         public int midiVelocity = 80;
 
         public bool restart;
-        public bool skipForward;
+        public bool setPosition;
+        public float setPositionTimeInSeconds;
         
         private AudioSource audioSource;
 		private PatchBank bank;
@@ -36,19 +40,19 @@ namespace UnityMidi
 
         private bool isPlayingNote;
 
-        private int audioFilterReadSampleRateHz; 
+        private int audioFilterReadSampleRate; 
         private CircularBuffer<float> availableSingleChannelOutputSamples;
         
         public void Awake()
         {
             audioSource = GetComponent<AudioSource>();
             
-            audioFilterReadSampleRateHz = AudioSettings.outputSampleRate;
+            audioFilterReadSampleRate = AudioSettings.outputSampleRate;
             // Synthesize samples in mono.
-            synthesizer = new Synthesizer(audioFilterReadSampleRateHz, midiSynthesizerChannelCount, BufferSize, 1);
+            synthesizer = new Synthesizer(audioFilterReadSampleRate, midiSynthesizerChannelCount, BufferSize, 1);
             sequencer = new MidiFileSequencer(synthesizer);
 
-            availableSingleChannelOutputSamples = new CircularBuffer<float>(BufferSize * 2);
+            availableSingleChannelOutputSamples = new CircularBuffer<float>(audioFilterReadSampleRate);
 
 			LoadBank();
 			if (playCreatedMidi)
@@ -66,6 +70,20 @@ namespace UnityMidi
 			{
 				Play();
 			}
+
+			StartCoroutine(LogTime());
+        }
+
+        IEnumerator LogTime()
+        {
+	        while (true)
+	        {
+		        yield return new WaitForSeconds(1);
+		        if (useAudioClip)
+		        {
+					Debug.Log($"AudioSource.time: {audioSource.time}");
+		        }
+	        }
         }
 
         private MidiFile CreateMidiFile()
@@ -84,10 +102,10 @@ namespace UnityMidi
         void AddNoteOnOffEvents(List<MidiEvent> midiEvents, byte pitch, int noteOnDeltaTimeInMillis, int noteLengthInMillis)
         {
 	        byte velocity = (byte)midiVelocity;
-	        MidiEvent noteOnEvent = MidiEventUtils.CreateNoteOnEvent(noteOnDeltaTimeInMillis, 0, pitch, velocity);
+	        MidiEvent noteOnEvent = MidiFileUtils.CreateNoteOnEvent(noteOnDeltaTimeInMillis, 0, pitch, velocity);
 	        midiEvents.Add(noteOnEvent);
 	        
-	        MidiEvent noteOffEvent = MidiEventUtils.CreateNoteOffEvent(noteLengthInMillis, 0, pitch, velocity);
+	        MidiEvent noteOffEvent = MidiFileUtils.CreateNoteOffEvent(noteLengthInMillis, 0, pitch, velocity);
 	        midiEvents.Add(noteOffEvent);
         }
 
@@ -113,19 +131,18 @@ namespace UnityMidi
 				Play();
 			}
 
-			if (skipForward)
+			if (setPosition)
 			{
-				skipForward = false;
+				setPosition = false;
 				
 				if (useAudioClip
 				    && audioSource.clip != null)
 				{
-					// Skip forward 30 seconds.
-					audioSource.time += 30;
+					audioSource.time = setPositionTimeInSeconds;
 				}
 				else
 				{
-					Debug.LogError("Skip forward only implemented for AudioClip");
+					sequencer.Seek(TimeSpan.FromSeconds(setPositionTimeInSeconds));
 				}
 			}
 		}
@@ -221,7 +238,11 @@ namespace UnityMidi
 
 			if (useAudioClip)
 			{
-				audioSource.clip = AudioClip.Create("Midi", BufferSize, midiSynthesizerChannelCount, audioFilterReadSampleRateHz, true, OnAudioClipRead, OnAudioClipSetPosition);
+				int audioClipSampleRate = audioFilterReadSampleRate;
+				double midiFileLengthInMillis = MidiFileUtils.GetMidiFileLengthInMillis(loadedMidiFile);
+				Debug.Log("Midi file length in millis: " + midiFileLengthInMillis);
+				int audioClipLengthInSamples = (int)((midiFileLengthInMillis / 1000.0) * audioClipSampleRate);
+				audioSource.clip = AudioClip.Create("Midi", audioClipLengthInSamples, midiSynthesizerChannelCount, audioClipSampleRate, true, OnAudioClipRead, OnAudioClipSetPosition);
 			}
             audioSource.Play();
 			sequencer.Play();
@@ -234,7 +255,7 @@ namespace UnityMidi
 
         private void OnAudioClipSetPosition(int positionInSamples)
         {
-	        // TODO: Implement
+	        sequencer.SeekSampleTime(positionInSamples);
         }
 
         public void Stop()
@@ -267,7 +288,7 @@ namespace UnityMidi
 			int neededSingleChannelSamples = data.Length / outputChannelCount;
 			if (neededSingleChannelSamples >= availableSingleChannelOutputSamples.Capacity)
 			{
-				Debug.LogWarning("available sample capacity is too small.");
+				Debug.LogWarning($"available sample capacity is too small. Samples needed: {neededSingleChannelSamples}, capacity: {availableSingleChannelOutputSamples.Capacity}");
 				neededSingleChannelSamples = availableSingleChannelOutputSamples.Capacity - 1;
 			}
 			while (availableSingleChannelOutputSamples.Count < neededSingleChannelSamples)
@@ -306,6 +327,8 @@ namespace UnityMidi
 
 		private void OnDestroy()
 		{
+			Stop();
+
 			// Destroy manually created AudioClip
 			Destroy(audioSource.clip);
 		}
