@@ -1,7 +1,8 @@
-﻿namespace AudioSynthesis.Midi
-{
-    using AudioSynthesis.Midi.Event;
+﻿using System;
+using AudioSynthesis.Midi.Event;
 
+namespace AudioSynthesis.Midi
+{
     public class MidiTrack
     {
         private int notesPlayed;
@@ -29,6 +30,7 @@
         public MidiEvent[] MidiEvents
         {
             get { return midiEvents; }
+            set { midiEvents = value; }
         }
         public byte[] Instruments
         {
@@ -39,6 +41,11 @@
             get { return drumPrograms; }
         }
 
+        public MidiTrack()
+            : this(new byte[] { 0 }, new byte[] { 0 }, Array.Empty<MidiEvent>())
+        {
+        }
+        
         public MidiTrack(byte[] instPrograms, byte[] drumPrograms, MidiEvent[] midiEvents)
         {
             this.instPrograms = instPrograms;
