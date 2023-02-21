@@ -358,16 +358,16 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 7a4cbb7412d2fba459dcb0e03aa8b8b1, type: 3}
   m_Name: 
   m_EditorClassIdentifier: 
-  playCreatedMidi: 1
   restart: 0
-  banksourcefile: soundfonts/Scc1t2.sf2
-  midiFilePath: LetItGoFrozen.mid
-  loadOnAwake: 1
+  playOnAwake: 1
   loop: 0
-  playOnStart: 1
-  bufferSize: 1024
+  playCreatedMidi: 1
+  midiFilePath: LetItGoFrozen.mid
+  useAudioClip: 0
+  bankFile: soundfonts/Scc1t2.sf2
   midiNote: 62
   midiVelocity: 127
+  skipForward: 0
 --- !u!1 &949084248
 GameObject:
   m_ObjectHideFlags: 0

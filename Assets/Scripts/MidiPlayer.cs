@@ -15,23 +15,27 @@ namespace UnityMidi
     {
 		private const int BufferSize = 1024;
 
-	    public bool restart;
 		public bool playOnAwake = true;
 		public bool loop = true;
 	    public bool playCreatedMidi;
+		public bool useAudioClip;
 		public string midiFilePath;
 	    public string bankFile = "soundfonts/Scc1t2.sf2";
         public int midiNote = 60;
         public int midiVelocity = 80;
+
+        public bool restart;
+        public bool skipForward;
         
         private AudioSource audioSource;
 		private PatchBank bank;
         private MidiFile loadedMidiFile;
         private Synthesizer synthesizer;
         private MidiFileSequencer sequencer;
+        private int midiSynthesizerChannelCount = 1;
 
         private bool isPlayingNote;
-    
+
         private int audioFilterReadSampleRateHz; 
         private CircularBuffer<float> availableSingleChannelOutputSamples;
         
@@ -41,8 +45,7 @@ namespace UnityMidi
             
             audioFilterReadSampleRateHz = AudioSettings.outputSampleRate;
             // Synthesize samples in mono.
-            int synthesizerChannelCount = 1;
-            synthesizer = new Synthesizer(audioFilterReadSampleRateHz, synthesizerChannelCount, BufferSize, 1);
+            synthesizer = new Synthesizer(audioFilterReadSampleRateHz, midiSynthesizerChannelCount, BufferSize, 1);
             sequencer = new MidiFileSequencer(synthesizer);
 
             availableSingleChannelOutputSamples = new CircularBuffer<float>(BufferSize * 2);
@@ -108,6 +111,22 @@ namespace UnityMidi
 				restart = false;
 				LoadMidiFile(loadedMidiFile);
 				Play();
+			}
+
+			if (skipForward)
+			{
+				skipForward = false;
+				
+				if (useAudioClip
+				    && audioSource.clip != null)
+				{
+					// Skip forward 30 seconds.
+					audioSource.time += 30;
+				}
+				else
+				{
+					Debug.LogError("Skip forward only implemented for AudioClip");
+				}
 			}
 		}
 
@@ -199,13 +218,26 @@ namespace UnityMidi
         public void Play()
         {
 			Debug.Log("Playing midi");
-			
-			// audioSource.clip = AudioClip.Create("Midi", bufferSize, channel, sampleRate, true, OnAudioRead);
+
+			if (useAudioClip)
+			{
+				audioSource.clip = AudioClip.Create("Midi", BufferSize, midiSynthesizerChannelCount, audioFilterReadSampleRateHz, true, OnAudioClipRead, OnAudioClipSetPosition);
+			}
             audioSource.Play();
 			sequencer.Play();
         }
 
-		public void Stop()
+        private void OnAudioClipRead(float[] data)
+        {
+	        FillOutputBuffer(data, midiSynthesizerChannelCount);
+        }
+
+        private void OnAudioClipSetPosition(int positionInSamples)
+        {
+	        // TODO: Implement
+        }
+
+        public void Stop()
 		{
 			audioSource.Stop();
 			sequencer.Stop();
@@ -215,42 +247,53 @@ namespace UnityMidi
 
 		void OnAudioFilterRead(float[] data, int outputChannelCount)
 	    {
-	        if (loadedMidiFile == null)
+	        if (useAudioClip
+				|| loadedMidiFile == null)
 	        {
 	            return;
 	        }
 
-	        // Synthesize new samples from the Midi instrument until there is enough to fill the data array.
-	        int neededSingleChannelSamples = data.Length / outputChannelCount;
-	        if (neededSingleChannelSamples >= availableSingleChannelOutputSamples.Capacity)
-	        {
-		        Debug.LogWarning("available sample capacity is too small.");
-		        neededSingleChannelSamples = availableSingleChannelOutputSamples.Capacity - 1;
-	        }
-	        while (availableSingleChannelOutputSamples.Count < neededSingleChannelSamples)
-	        {
-		        sequencer.FillMidiEventQueue(loop);
-		        synthesizer.GetNext();
-		        for (int i = 0; i < synthesizer.sampleBuffer.Length; i++)
-		        {
-			        availableSingleChannelOutputSamples.PushBack(synthesizer.sampleBuffer[i]);
-		        }
-	        }
-
-	        // The Midi stream is generated in mono (1 channel).
-	        // These samples are written to every channel of the output data array.
-	        for (int outputSampleIndex = 0; outputSampleIndex < data.Length && !availableSingleChannelOutputSamples.IsEmpty; outputSampleIndex += outputChannelCount)
-	        {
-	            float sampleValue = availableSingleChannelOutputSamples.Front();
-	            availableSingleChannelOutputSamples.PopFront();
-
-	            for (int outputChannelIndex = 0; outputChannelIndex < outputChannelCount; outputChannelIndex++)
-	            {
-	                data[outputSampleIndex + outputChannelIndex] = sampleValue;
-	            }
-	        }
+	        FillOutputBuffer(data, outputChannelCount);
 	    }
-		
+
+		private void FillOutputBuffer(float[] data, int outputChannelCount)
+		{
+			if (data == null)
+			{
+				return;
+			}
+			
+			// Synthesize new samples from the Midi instrument until there is enough to fill the data array.
+			int neededSingleChannelSamples = data.Length / outputChannelCount;
+			if (neededSingleChannelSamples >= availableSingleChannelOutputSamples.Capacity)
+			{
+				Debug.LogWarning("available sample capacity is too small.");
+				neededSingleChannelSamples = availableSingleChannelOutputSamples.Capacity - 1;
+			}
+			while (availableSingleChannelOutputSamples.Count < neededSingleChannelSamples)
+			{
+				sequencer.FillMidiEventQueue(loop);
+				synthesizer.GetNext();
+				for (int i = 0; i < synthesizer.sampleBuffer.Length; i++)
+				{
+					availableSingleChannelOutputSamples.PushBack(synthesizer.sampleBuffer[i]);
+				}
+			}
+
+			// The Midi stream is generated in mono (1 channel).
+			// These samples are written to every channel of the output data array.
+			for (int outputSampleIndex = 0; outputSampleIndex < data.Length && !availableSingleChannelOutputSamples.IsEmpty; outputSampleIndex += outputChannelCount)
+			{
+				float sampleValue = availableSingleChannelOutputSamples.Front();
+				availableSingleChannelOutputSamples.PopFront();
+
+				for (int outputChannelIndex = 0; outputChannelIndex < outputChannelCount; outputChannelIndex++)
+				{
+					data[outputSampleIndex + outputChannelIndex] = sampleValue;
+				}
+			}
+		}
+
 		private static string AddFileExtensionIfNone(string path, string fileExtension)
 		{
 			if (!path.ToLowerInvariant().EndsWith(fileExtension.ToLowerInvariant()))
@@ -259,6 +302,12 @@ namespace UnityMidi
 			}
 
 			return path;
+		}
+
+		private void OnDestroy()
+		{
+			// Destroy manually created AudioClip
+			Destroy(audioSource.clip);
 		}
     }
 }
