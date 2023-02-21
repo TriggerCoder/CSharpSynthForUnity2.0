@@ -112,9 +112,9 @@ namespace AudioSynthesis.Sequencer
         {
             blockList[channel] = muteValue;
         }
-        public void Seek(TimeSpan time)
+        
+        public void SeekSampleTime(int targetSampleTime)
         {
-            int targetSampleTime = (int)(synth.SampleRate * time.TotalSeconds);
             if (targetSampleTime > sampleTime)
             {//process forward
                 SilentProcess(targetSampleTime - sampleTime);
@@ -128,6 +128,12 @@ namespace AudioSynthesis.Sequencer
                 synth.ResetSynthControls();
                 SilentProcess(targetSampleTime);
             }
+        }
+        
+        public void Seek(TimeSpan time)
+        {
+            int targetSampleTime = (int)(synth.SampleRate * time.TotalSeconds);
+            SeekSampleTime(targetSampleTime);
         }
 
 		public void ResetMidi()
